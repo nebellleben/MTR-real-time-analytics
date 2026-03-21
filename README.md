@@ -96,16 +96,16 @@ Total Estimated Cost: ~$5-10/month
 
 ## Technology Stack
 
-| Layer | Technology | Purpose | Cost |
-|-------|------------|---------|------|
-| **Cloud Provider** | Google Cloud Platform (GCP) | Infrastructure hosting | Pay-per-use |
-| **Infrastructure as Code** | Terraform | Reproducible infrastructure | Free |
-| **Compute** | Local/Cloud Run | Producer script hosting | Free tier |
-| **Streaming** | BigQuery Streaming API | Real-time data ingestion | ~$0.01/200MB |
-| **Data Lake** | Cloud Storage | Raw data storage | ~$1/mo |
-| **Data Warehouse** | BigQuery | Analytical queries | ~$5/mo |
-| **Transformation** | dbt | SQL-based transformations | Free |
-| **Dashboard** | Looker Studio | Data visualization | Free |
+| Layer | Technology | Purpose |
+|-------|------------|---------|
+| **Cloud Provider** | Google Cloud Platform (GCP) | Infrastructure hosting |
+| **Infrastructure as Code** | Terraform | Reproducible infrastructure |
+| **Compute** | Local/Cloud Run | Producer script hosting |
+| **Streaming** | BigQuery Streaming API | Real-time data ingestion |
+| **Data Lake** | Cloud Storage | Raw data storage |
+| **Data Warehouse** | BigQuery | Analytical queries |
+| **Transformation** | dbt | SQL-based transformations |
+| **Dashboard** | Looker Studio | Data visualization |
 
 ## Data Source
 
@@ -298,30 +298,29 @@ CLUSTER BY line_code, station_code;
 
 ### Dashboard Tiles
 
-### Tile 1: Average Wait Time by Line (Categorical)
+#### Tile 1: Average Wait Time by Line (Categorical)
 - **Type**: Bar Chart
 - **Dimension**: Line Name
 - **Metric**: Average Time Remaining (seconds)
 - **Purpose**: Compare service levels across lines
 
-### Tile 2: Delay Trends Over Time (Temporal)
+#### Tile 2: Delay Trends Over Time (Temporal)
 - **Type**: Time Series Line Chart
 - **Dimension**: Hour of Day
 - **Metric**: Count of Delayed Trains, Average Delay Duration
 - **Purpose**: Identify peak delay periods
 
-## Dashboard
+## Evaluation Criteria Coverage
 
-| Criteria | Points | Implementation |
-|----------|--------|----------------|
-| Problem Description | 4 | This README + detailed documentation |
-| Cloud + IaC | 4 | GCP + Terraform |
-| Streaming Ingestion | 4 | BigQuery Streaming API |
-| Data Warehouse | 4 | BigQuery with partitioning & clustering |
-| Transformations | 4 | dbt with staging/marts layers |
-| Dashboard | 4 | Looker Studio with 2+ tiles |
-| Reproducibility | 4 | Makefile + detailed README |
-| **Total** | **28** | |
+| Criteria | Implementation |
+|----------|----------------|
+| Problem Description | This README + detailed documentation |
+| Cloud + IaC | GCP + Terraform |
+| Streaming Ingestion | BigQuery Streaming API |
+| Data Warehouse | BigQuery with partitioning & clustering |
+| Transformations | dbt with staging/marts layers |
+| Dashboard | Looker Studio with 2+ tiles |
+| Reproducibility | Makefile + detailed README |
 
 ## Going the Extra Mile
 
