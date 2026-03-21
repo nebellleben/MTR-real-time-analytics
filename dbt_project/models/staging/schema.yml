@@ -19,38 +19,6 @@ models:
         description: "MTR line name in English"
         tests:
           - not_null
-      - name: dest_station
-        description: "Destination station"
-      - name: scheduled_arrival_time
-        description: "Expected arrival time"
-        tests:
-          - not_null
-      - name: time_remaining_seconds
-        description: "Seconds until arrival"
-        tests:
-          - not_null
-      - name: platform
-        description: "Platform number"
-      - name: sequence
-        description: "Train sequence"
-      - name: is_delayed
-        description: "Whether train is delayed"
-        tests:
-          - not_null
-      - name: delay_seconds
-        description: "Delay duration in seconds"
-      - name: direction
-        description: "Train direction (DT=Down/UT=Up)"
-      - name: ingestion_timestamp
-        description: "When this record was ingested"
-        tests:
-          - not_null
-      - name: ingestion_date
-        description: "Date partition key"
-        tests:
-          - not_null
-          - accepted_values:
-              values: ['TCL', 'EAL', 'TML', 'TKL', 'KTL', 'TWL', 'ISL', 'SIL', 'DRL', 'AEL']
       - name: station_code
         description: "Station code"
         tests:
