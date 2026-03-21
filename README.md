@@ -2,15 +2,58 @@
 
 A serverless streaming data pipeline that ingests MTR (Hong Kong Mass Transit Railway) train arrival data, processes it, stores it in BigQuery, and visualizes insights via Looker Studio.
 
+## About Hong Kong's MTR System
+
+The **Mass Transit Railway (MTR)** is Hong Kong's major public transport network and one of the most efficient, profitable, and reliable metro systems in the world. Since its inception in 1979, the MTR has grown to become the backbone of Hong Kong's transportation infrastructure.
+
+### Key Statistics
+
+| Metric | Value |
+|--------|-------|
+| **Daily Ridership** | ~5.8 million passengers |
+| **Annual Ridership** | ~1.7 billion passengers |
+| **Network Length** | 271 km (168 miles) |
+| **Number of Stations** | 99 heavy rail stations |
+| **Lines Operated** | 10 lines + Airport Express |
+| **On-time Performance** | 99.9% |
+| **Fare Recovery Ratio** | ~185% (world's most profitable transit system) |
+
+### Network Coverage
+
+The MTR network connects all major districts across Hong Kong:
+
+| Line | Code | Route | Key Stations |
+|------|------|-------|--------------|
+| **Tsuen Wan Line** | TWL | Central ↔ Tsuen Wan | Central, Mong Kok, Tsuen Wan |
+| **Island Line** | ISL | Kennedy Town ↔ Chai Wan | Central, Causeway Bay, Chai Wan |
+| **Kwun Tong Line** | KTL | Whampoa ↔ Tiu Keng Leng | Mong Kok, Kowloon Tong, Kwun Tong |
+| **Tseung Kwan O Line** | TKL | North Point ↔ Po Lam/LOHAS Park | Quarry Bay, Tseung Kwan O |
+| **Tung Chung Line** | TCL | Hong Kong ↔ Tung Chung | Central, Kowloon, Tung Chung |
+| **Airport Express** | AEL | Hong Kong ↔ Airport | Kowloon, Tsing Yi, Airport |
+| **Tuen Ma Line** | TML | Tuen Mun ↔ Wu Kai Sha | Yuen Long, Mong Kok, Sha Tin |
+| **East Rail Line** | EAL | Admiralty ↔ Lo Wu/Lok Ma Chau | Central, Sha Tin, Border Crossings |
+| **South Island Line** | SIL | Admiralty ↔ South Horizons | Ocean Park, Wong Chuk Hang |
+| **Disneyland Resort Line** | DRL | Sunny Bay ↔ Disneyland | Disneyland Resort |
+
+### Why MTR Data Matters
+
+The MTR handles nearly **90% of all public transport trips** in Hong Kong, making real-time operational data critical for:
+
+- **Urban Planning**: Understanding passenger flow patterns helps optimize city development
+- **Service Reliability**: Monitoring delays enables proactive service improvements
+- **Commuter Experience**: Real-time arrival information helps millions plan their journeys
+- **Academic Research**: Transit data supports studies on mobility, urbanization, and sustainability
+
 ## Problem Statement
 
-Hong Kong's MTR is one of the world's busiest metro systems, serving over 5 million passengers daily. Commuters often face:
+Despite the MTR's world-class efficiency, commuters and analysts face several challenges:
 
-- Uncertainty about train arrival times
-- Unexpected delays during peak hours
-- Lack of visibility into service reliability patterns
+- **Uncertainty about train arrival times**: While station displays show arrivals, historical patterns are not easily accessible
+- **Unexpected delays during peak hours**: Congestion at interchange stations can cause cascading delays
+- **Lack of visibility into service reliability patterns**: No public dashboard shows delay trends by line, time, or station
+- **Limited historical analysis**: Real-time data is ephemeral; capturing it enables trend analysis
 
-This project builds an end-to-end streaming data pipeline that:
+This project addresses these challenges by building an end-to-end streaming data pipeline that:
 
 1. **Ingests real-time train arrival data** from the MTR Next Train API
 2. **Streams data directly** to BigQuery via the streaming API
