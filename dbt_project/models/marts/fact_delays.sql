@@ -1,12 +1,11 @@
 with arrivals as (
     select
         ingestion_date,
-        extract(hour from ingestion_timestamp) as hour,
+        extract(hour from scheduled_arrival_time) as hour,
         line_code,
-        station_code,
-        time_remaining_seconds,
-        is_delayed,
-        delay_seconds
+        line_name,
+        sum(case when is_delayed then 1 else 0 end) as delayed_count,
+        sum(delay_seconds) as total_delay_seconds
     from {{ ref('stg_arrivals') }}
 ),
 
@@ -15,16 +14,56 @@ metrics as (
         ingestion_date,
         hour,
         line_code,
-        station_code,
+        line_name,
         count(*) as total_arrivals,
-        sum(case when is_delayed then 1 else 0 end) as delayed_count,
-        sum(case when is_delayed then delay_seconds else 0 end) as total_delay_seconds,
-        avg(time_remaining_seconds) as avg_wait_time_seconds,
-        max(time_remaining_seconds) as max_wait_time_seconds,
-        min(time_remaining_seconds) as min_wait_time_seconds
+        sum(delayed_count) as delayed_count,
+        sum(total_delay_seconds) as total_delay_seconds,
+        case
+            when total_arrivals > 5 
+            then round(total_delay_seconds / total_arrivals, 2)
+            else 0
+        end as avg_delay_seconds,
+        max(total_delay_seconds) as max_delay_seconds,
+        min(total_delay_seconds) as min_delay_seconds,
+        case
+            when total_arrivals > 5 
+            then round(delayed_count / total_arrivals * 100.0, 2)
+            else 0
+        end as delay_percentage
     from arrivals
-    group by ingestion_date, hour, line_code, station_code
+),
+
+final as (
+    select
+        ingestion_date,
+        hour,
+        line_code,
+        line_name,
+        total_arrivals,
+        delayed_count,
+        total_delay_seconds,
+        avg_delay_seconds,
+        max_delay_seconds,
+        min_delay_seconds,
+        delay_percentage
+    from metrics
 )
+
+select
+    ingestion_date,
+    hour,
+    line_code,
+    line_name,
+    total_arrivals,
+    delayed_count,
+    total_delay_seconds,
+    avg_delay_seconds,
+    max_delay_seconds,
+    min_delay_seconds,
+    delay_percentage
+from final
+where total_arrivals > 0
+where total_arrivals > 0
 
 select
     ingestion_date,

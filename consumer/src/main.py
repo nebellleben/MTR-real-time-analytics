@@ -6,72 +6,77 @@ import os
 import json
 import logging
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, List
 
 import apache_beam as beam
 from apache_beam.options.pipeline_options import PipelineOptions, StandardOptions
 from apache_beam.io.gcp.pubsub import ReadFromPubSub
 from apache_beam.io.gcp.bigquery import WriteToBigQuery, BigQueryDisposition
-from google.cloud import bigquery
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class PipelineConfig:
-    PROJECT_ID = os.getenv("PROJECT_ID", "your-project-id")
-    PUBSUB_SUBSCRIPTION = os.getenv("PUBSUB_SUBSCRIPTION", "mtr-arrivals-dataflow")
-    BIGQUERY_TABLE = os.getenv("BIGQUERY_TABLE", "mtr_analytics.raw_arrivals")
-    TEMP_LOCATION = os.getenv("TEMP_LOCATION", "gs://mtr-analytics-temp/temp")
-    STAGING_LOCATION = os.getenv("STAGING_LOCATION", "gs://mtr-analytics-temp/staging")
-
-
 class ParseArrivalFn(beam.DoFn):
-    """Parse JSON message from Pub/Sub"""
-
     def process(self, element: bytes):
         try:
             data = json.loads(element.decode("utf-8"))
             yield data
         except json.JSONDecodeError as e:
             logger.error(f"Failed to parse message: {e}")
-            return
 
 
 class EnrichArrivalFn(beam.DoFn):
-    """Enrich arrival data with computed fields"""
+    def __init__(self, delay_threshold: int = 300):
+        self.delay_threshold = delay_threshold
 
     def process(self, element: Dict[str, Any]):
         try:
-            arrival_time = datetime.fromisoformat(element.get("arrival_time", ""))
-            ingestion_time = datetime.fromisoformat(
-                element.get("ingestion_timestamp", "")
-            )
+            arrival_time_str = element.get("arrival_time", "")
+            ingestion_time_str = element.get("ingestion_timestamp", "")
+
+            if arrival_time_str:
+                arrival_time = datetime.fromisoformat(
+                    arrival_time_str.replace("Z", "+00:00")
+                )
+            else:
+                arrival_time = datetime.utcnow()
+
+            if ingestion_time_str:
+                ingestion_time = datetime.fromisoformat(
+                    ingestion_time_str.replace("Z", "+00:00")
+                )
+            else:
+                ingestion_time = datetime.utcnow()
 
             time_remaining = element.get("time_remaining", 0)
-            delay_threshold = 300
-
-            is_delayed = time_remaining > delay_threshold
+            is_delayed = time_remaining > self.delay_threshold
             delay_seconds = (
-                max(0, time_remaining - delay_threshold) if is_delayed else 0
+                max(0, time_remaining - self.delay_threshold) if is_delayed else 0
             )
 
             enriched = {
-                **element,
+                "arrival_id": element.get("arrival_id", ""),
+                "line_code": element.get("line_code", ""),
+                "line_name": element.get("line_name", ""),
+                "station_code": element.get("station_code", ""),
+                "station_name": element.get("station_name", ""),
+                "dest_station": element.get("dest_station", ""),
+                "platform": element.get("platform", ""),
+                "sequence": element.get("sequence", 0),
+                "arrival_time": arrival_time.isoformat(),
+                "time_remaining": time_remaining,
                 "is_delayed": is_delayed,
                 "delay_seconds": delay_seconds,
-                "arrival_time": arrival_time.isoformat(),
                 "ingestion_timestamp": ingestion_time.isoformat(),
+                "ingestion_date": ingestion_time.strftime("%Y-%m-%d"),
             }
-
             yield enriched
         except Exception as e:
             logger.error(f"Failed to enrich arrival: {e}")
-            return
 
 
-def get_table_schema():
-    """Return BigQuery table schema"""
+def get_table_schema() -> str:
     return ",".join(
         [
             "arrival_id:STRING",
@@ -93,33 +98,40 @@ def get_table_schema():
 
 
 def run_pipeline(argv=None):
-    """Main pipeline entry point"""
-    config = PipelineConfig()
+    project_id = os.getenv("PROJECT_ID", "de-zoomcamp-485516")
+    subscription = os.getenv("PUBSUB_SUBSCRIPTION", "mtr-arrivals-dataflow")
+    table = os.getenv("BIGQUERY_TABLE", "mtr_analytics.raw_arrivals")
+    temp_location = os.getenv(
+        "TEMP_LOCATION", "gs://de-zoomcamp-485516-mtr-data-lake/temp"
+    )
+    staging_location = os.getenv(
+        "STAGING_LOCATION", "gs://de-zoomcamp-485516-mtr-data-lake/staging"
+    )
+    region = os.getenv("REGION", "asia-east2")
 
     pipeline_options = PipelineOptions(
         argv,
-        project=config.PROJECT_ID,
+        project=project_id,
         runner="DataflowRunner",
         streaming=True,
-        temp_location=config.TEMP_LOCATION,
-        staging_location=config.STAGING_LOCATION,
-        region=os.getenv("REGION", "asia-east2"),
+        temp_location=temp_location,
+        staging_location=staging_location,
+        region=region,
         save_main_session=True,
     )
 
     standard_options = pipeline_options.view_as(StandardOptions)
     standard_options.streaming = True
 
-    subscription_path = (
-        f"projects/{config.PROJECT_ID}/subscriptions/{config.PUBSUB_SUBSCRIPTION}"
-    )
+    subscription_path = f"projects/{project_id}/subscriptions/{subscription}"
 
-    logger.info(f"Starting Dataflow pipeline reading from {subscription_path}")
-    logger.info(f"Writing to BigQuery table {config.BIGQUERY_TABLE}")
+    logger.info(f"Starting Dataflow pipeline")
+    logger.info(f"Subscription: {subscription_path}")
+    logger.info(f"Table: {table}")
 
-    with beam.Pipeline(options=pipeline_options) as pipeline:
+    with beam.Pipeline(options=pipeline_options) as p:
         (
-            pipeline
+            p
             | "Read from Pub/Sub" >> ReadFromPubSub(subscription=subscription_path)
             | "Parse JSON" >> beam.ParDo(ParseArrivalFn())
             | "Enrich Arrival" >> beam.ParDo(EnrichArrivalFn())
@@ -127,7 +139,7 @@ def run_pipeline(argv=None):
             >> beam.Filter(lambda x: x is not None and "arrival_id" in x)
             | "Write to BigQuery"
             >> WriteToBigQuery(
-                table=config.BIGQUERY_TABLE,
+                table=table,
                 schema=get_table_schema(),
                 create_disposition=BigQueryDisposition.CREATE_IF_NEEDED,
                 write_disposition=BigQueryDisposition.WRITE_APPEND,
