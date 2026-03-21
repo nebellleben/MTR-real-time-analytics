@@ -1,6 +1,6 @@
 # MTR Real-Time Transit Analytics
 
-A serverless streaming data pipeline that ingests MTR (Hong Kong Mass Transit Railway) train arrival data, processes it through Pub/Sub and Dataflow, stores it in BigQuery, and visualizes insights via Looker Studio.
+A serverless streaming data pipeline that ingests MTR (Hong Kong Mass Transit Railway) train arrival data, processes it, stores it in BigQuery, and visualizes insights via Looker Studio.
 
 ## Problem Statement
 
@@ -13,7 +13,7 @@ Hong Kong's MTR is one of the world's busiest metro systems, serving over 5 mill
 This project builds an end-to-end streaming data pipeline that:
 
 1. **Ingests real-time train arrival data** from the MTR Next Train API
-2. **Processes streaming data** using Google Cloud Dataflow (Apache Beam)
+2. **Streams data directly** to BigQuery via the streaming API
 3. **Stores data** in a partitioned BigQuery data warehouse
 4. **Transforms data** using dbt for analytics-ready tables
 5. **Visualizes insights** through an interactive Looker Studio dashboard
@@ -25,26 +25,19 @@ This project builds an end-to-end streaming data pipeline that:
 │                     SERVERLESS INFRASTRUCTURE (Terraform)                    │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                             │
-│  ┌─────────────┐     ┌──────────────────┐     ┌─────────────────────────┐  │
-│  │   MTR API   │────▶│   Cloud Run      │────▶│   Pub/Sub               │  │
-│  │   Producer  │     │   (Serverless)   │     │   mtr-arrivals topic    │  │
-│  │   (Python)  │     │   ~$0 (free tier)│     │   ~$5/month             │  │
-│  └─────────────┘     └──────────────────┘     └─────────────────────────┘  │
-│                                                         │                   │
-│                                                         ▼                   │
-│                                              ┌─────────────────────────┐   │
-│                                              │   Dataflow              │   │
-│                                              │   Streaming Job         │   │
-│                                              │   ~$10-20/month         │   │
-│                                              └─────────────────────────┘   │
-│                                                         │                   │
-│                                                         ▼                   │
+│  ┌─────────────┐     ┌──────────────────────────────────────────────────┐  │
+│  │   MTR API   │────▶│              BigQuery Streaming API              │  │
+│  │   Producer  │     │   Direct inserts to raw_arrivals table           │  │
+│  │   (Python)  │     │   ~$0.01 per 200MB streamed                      │  │
+│  └─────────────┘     └──────────────────────────────────────────────────┘  │
+│                                              │                              │
 │  ┌─────────────────────────────────────────────────────────────────────┐   │
 │  │                        BigQuery (DWH)                                │   │
 │  │   ├─ raw_arrivals (partitioned by date, clustered by line/station)  │   │
-│  │   ├─ dim_lines                                                       │   │
-│  │   ├─ dim_stations                                                    │   │
-│  │   └─ fact_delays (dbt)                                               │   │
+│  │   ├─ stg_arrivals (dbt view)                                        │   │
+│  │   ├─ dim_lines (dbt table)                                          │   │
+│  │   ├─ dim_stations (dbt table)                                       │   │
+│  │   └─ fact_delays (dbt table)                                        │   │
 │  │                        ~$5/month                                     │   │
 │  └─────────────────────────────────────────────────────────────────────┘   │
 │                                                         │                   │
@@ -55,7 +48,7 @@ This project builds an end-to-end streaming data pipeline that:
 │                                              └─────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────┘
 
-Total Estimated Cost: ~$20-30/month
+Total Estimated Cost: ~$5-10/month
 ```
 
 ## Technology Stack
@@ -64,10 +57,9 @@ Total Estimated Cost: ~$20-30/month
 |-------|------------|---------|------|
 | **Cloud Provider** | Google Cloud Platform (GCP) | Infrastructure hosting | Pay-per-use |
 | **Infrastructure as Code** | Terraform | Reproducible infrastructure | Free |
-| **Compute** | Cloud Run | Serverless producer hosting | Free tier |
-| **Message Broker** | Cloud Pub/Sub | Real-time data streaming | ~$5/mo |
-| **Stream Processing** | Dataflow (Apache Beam) | Real-time transformations | ~$15/mo |
-| **Data Lake** | Cloud Storage | Raw data storage | ~$2/mo |
+| **Compute** | Local/Cloud Run | Producer script hosting | Free tier |
+| **Streaming** | BigQuery Streaming API | Real-time data ingestion | ~$0.01/200MB |
+| **Data Lake** | Cloud Storage | Raw data storage | ~$1/mo |
 | **Data Warehouse** | BigQuery | Analytical queries | ~$5/mo |
 | **Transformation** | dbt | SQL-based transformations | Free |
 | **Dashboard** | Looker Studio | Data visualization | Free |
@@ -96,8 +88,8 @@ The pipeline consumes data from the [MTR Open Data API](https://opendata.mtr.com
 |-------|------|-------------|
 | `arrival_id` | STRING | Unique identifier |
 | `line_code` | STRING | MTR line identifier (e.g., "TCL", "EAL") |
+| `line_name` | STRING | Full line name |
 | `station_code` | STRING | Station identifier |
-| `station_name` | STRING | Station name in English |
 | `dest_station` | STRING | Destination station |
 | `arrival_time` | TIMESTAMP | Expected arrival time |
 | `time_remaining` | INT64 | Seconds until arrival |
@@ -105,6 +97,7 @@ The pipeline consumes data from the [MTR Open Data API](https://opendata.mtr.com
 | `sequence` | INT64 | Train sequence in the schedule |
 | `is_delayed` | BOOLEAN | Whether the train is delayed |
 | `delay_seconds` | INT64 | Delay duration in seconds |
+| `direction` | STRING | Train direction (DT=Down, UT=Up) |
 | `ingestion_timestamp` | TIMESTAMP | When record was ingested |
 | `ingestion_date` | DATE | Date partition key |
 
@@ -122,27 +115,25 @@ MTR-real-time-analytics/
 │   ├── variables.tf                   # Input variables
 │   └── outputs.tf                     # Output values
 │
-├── producer/                          # Cloud Run producer service
+├── producer/                          # BigQuery streaming producer
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── src/
-│       └── main.py                    # Pub/Sub producer
-│
-├── consumer/                          # Dataflow streaming job
-│   ├── Dockerfile
-│   ├── requirements.txt
-│   └── src/
-│       └── main.py                    # Apache Beam pipeline
+│       └── main.py                    # BigQuery streaming inserts
 │
 ├── dbt_project/                       # dbt transformations
 │   ├── dbt_project.yml
+│   ├── profiles.yml
 │   ├── models/
 │   │   ├── staging/
-│   │   │   └── stg_arrivals.sql
+│   │   │   ├── sources.yml
+│   │   │   ├── stg_arrivals.sql
+│   │   │   └── schema.yml
 │   │   └── marts/
 │   │       ├── dim_lines.sql
 │   │       ├── dim_stations.sql
-│   │       └── fact_delays.sql
+│   │       ├── fact_delays.sql
+│   │       └── schema.yml
 │   └── tests/
 │
 ├── dashboard/                         # Dashboard configuration
@@ -180,19 +171,26 @@ make infra-init
 make infra-apply
 ```
 
-### 3. Deploy Streaming Pipeline
+### 3. Run Producer (Stream Data to BigQuery)
 
 ```bash
-make deploy-producer
-make deploy-dataflow
+cd producer
+pip install -r requirements.txt
+export PROJECT_ID=de-zoomcamp-485516
+export BIGQUERY_DATASET=mtr_analytics
+export BIGQUERY_TABLE=raw_arrivals
+python src/main.py
 ```
 
 ### 4. Run dbt Transformations
 
 ```bash
 cd dbt_project
-dbt run
-dbt test
+python3.11 -m venv .venv311
+source .venv311/bin/activate
+pip install dbt-bigquery
+BIGQUERY_PROJECT=de-zoomcamp-485516 dbt run
+BIGQUERY_PROJECT=de-zoomcamp-485516 dbt test
 ```
 
 ### 5. Connect Looker Studio
@@ -209,10 +207,6 @@ make help                    # Show all available commands
 make infra-init              # Initialize Terraform
 make infra-apply             # Apply Terraform changes
 make infra-destroy           # Destroy infrastructure
-make docker-build            # Build all Docker images
-make docker-push             # Push images to GCR
-make deploy-producer         # Deploy producer to Cloud Run
-make deploy-dataflow         # Deploy Dataflow streaming job
 make dbt-run                 # Run dbt models
 make dbt-test                # Run dbt tests
 make local-up                # Start local development
@@ -229,8 +223,8 @@ CREATE TABLE `{{project}}.{{dataset}}.raw_arrivals`
 (
     arrival_id STRING NOT NULL,
     line_code STRING NOT NULL,
+    line_name STRING,
     station_code STRING NOT NULL,
-    station_name STRING,
     dest_station STRING,
     arrival_time TIMESTAMP,
     time_remaining INT64,
@@ -238,6 +232,7 @@ CREATE TABLE `{{project}}.{{dataset}}.raw_arrivals`
     sequence INT64,
     is_delayed BOOLEAN,
     delay_seconds INT64,
+    direction STRING,
     ingestion_timestamp TIMESTAMP NOT NULL,
     ingestion_date DATE NOT NULL
 )
@@ -249,11 +244,16 @@ CLUSTER BY line_code, station_code;
 
 | Table | Description |
 |-------|-------------|
+| `stg_arrivals` | Cleaned and deduplicated arrival data (view) |
 | `dim_lines` | MTR line reference data |
 | `dim_stations` | Station reference data with line associations |
 | `fact_delays` | Aggregated delay metrics by time, line, station |
 
-## Dashboard Tiles
+## Dashboard
+
+**Live Dashboard**: [MTR Real-Time Analytics](https://lookerstudio.google.com/reporting/580aa7b2-68b8-44b9-8d7d-a82f41bd6b33)
+
+### Dashboard Tiles
 
 ### Tile 1: Average Wait Time by Line (Categorical)
 - **Type**: Bar Chart
@@ -267,24 +267,13 @@ CLUSTER BY line_code, station_code;
 - **Metric**: Count of Delayed Trains, Average Delay Duration
 - **Purpose**: Identify peak delay periods
 
-## Cost Breakdown (Monthly)
-
-| Resource | Estimated Cost (USD) |
-|----------|---------------------|
-| Cloud Run (free tier) | $0 |
-| Pub/Sub (10M messages) | $5 |
-| Dataflow (streaming) | $15 |
-| Cloud Storage (100 GB) | $2 |
-| BigQuery (500 GB processed) | $5 |
-| **Total** | **~$27/month** |
-
-## Evaluation Criteria Coverage
+## Dashboard
 
 | Criteria | Points | Implementation |
 |----------|--------|----------------|
 | Problem Description | 4 | This README + detailed documentation |
 | Cloud + IaC | 4 | GCP + Terraform |
-| Streaming Ingestion | 4 | Pub/Sub + Dataflow (Apache Beam) |
+| Streaming Ingestion | 4 | BigQuery Streaming API |
 | Data Warehouse | 4 | BigQuery with partitioning & clustering |
 | Transformations | 4 | dbt with staging/marts layers |
 | Dashboard | 4 | Looker Studio with 2+ tiles |
@@ -297,9 +286,9 @@ CLUSTER BY line_code, station_code;
 |---------|--------|
 | CI/CD Pipeline (GitHub Actions) | Planned |
 | Unit Tests (pytest) | Planned |
-| Data Quality Tests (dbt) | Planned |
+| Data Quality Tests (dbt) | ✅ Completed (21 tests) |
 | Monitoring & Alerting | Planned |
-| dbt Documentation | Planned |
+| dbt Documentation | ✅ Completed |
 
 ## License
 

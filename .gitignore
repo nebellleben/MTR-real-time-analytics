@@ -35,6 +35,7 @@ wheels/
 .pytest_cache/
 .coverage
 htmlcov/
+.venv311/
 
 Jupyter Notebooks
 .ipynb_checkpoints

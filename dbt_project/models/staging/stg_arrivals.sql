@@ -4,7 +4,6 @@ with source as (
         line_code,
         line_name,
         station_code,
-        station_name,
         dest_station,
         platform,
         sequence,
@@ -12,6 +11,7 @@ with source as (
         time_remaining as time_remaining_seconds,
         is_delayed,
         delay_seconds,
+        direction,
         ingestion_timestamp,
         ingestion_date
     from {{ source('mtr_analytics', 'raw_arrivals') }}
@@ -24,7 +24,6 @@ deduplicated as (
         line_code,
         line_name,
         station_code,
-        station_name,
         dest_station,
         platform,
         sequence,
@@ -32,6 +31,7 @@ deduplicated as (
         time_remaining_seconds,
         is_delayed,
         delay_seconds,
+        direction,
         ingestion_timestamp,
         ingestion_date,
         row_number() over (
@@ -47,7 +47,6 @@ final as (
         line_code,
         line_name,
         station_code,
-        station_name,
         dest_station,
         platform,
         sequence,
@@ -55,6 +54,7 @@ final as (
         time_remaining_seconds,
         is_delayed,
         delay_seconds,
+        direction,
         ingestion_timestamp,
         ingestion_date
     from deduplicated

@@ -25,11 +25,6 @@ models:
         description: "Station code"
         tests:
           - not_null
-          - unique
-      - name: station_name
-        description: "Station name in English"
-        tests:
-          - not_null
       - name: line_code
         description: "MTR line code"
         tests:

@@ -19,10 +19,6 @@ models:
         description: "Station code"
         tests:
           - not_null
-      - name: station_name
-        description: "Station name in English"
-        tests:
-          - not_null
       - name: dest_station
         description: "Destination station"
       - name: scheduled_arrival_time
@@ -43,6 +39,8 @@ models:
           - not_null
       - name: delay_seconds
         description: "Delay duration in seconds"
+      - name: direction
+        description: "Direction of train (DT for Down/UT for Up)"
       - name: ingestion_timestamp
         description: "When this record was ingested"
         tests:

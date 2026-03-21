@@ -1,0 +1,9 @@
+version: 2
+
+sources:
+  - name: mtr_analytics
+    database: "{{ env_var('BIGQUERY_PROJECT', 'de-zoomcamp-485516') }}"
+    schema: mtr_analytics
+    tables:
+      - name: raw_arrivals
+        description: "Raw MTR arrival data from streaming pipeline"
