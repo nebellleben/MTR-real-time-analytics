@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  pubsub-emulator:
+    image: google/cloud-sdk:latest
+    container_name: pubsub-emulator
+    ports:
+      - "8085:8085"
+    environment:
+      - PUBSUB_EMULATOR_HOST=0.0.0.0:8085
+      - PUBSUB_PROJECT_ID=local-project
+    command: >
+      gcloud beta emulators pubsub start --project=local-project --host-port=0.0.0.0:8085
+    networks:
+      - mtr-network
+
+  bigquery-emulator:
+    image: ghcr.io/goccy/bigquery-emulator:latest
+    container_name: bigquery-emulator
+    ports:
+      - "9050:9050"
+    environment:
+      - PROJECT_ID=local-project
+    networks:
+      - mtr-network
+
+  producer:
+    build:
+      context: ./producer
+      dockerfile: Dockerfile
+    container_name: mtr-producer
+    depends_on:
+      - pubsub-emulator
+    environment:
+      - PROJECT_ID=local-project
+      - PUBSUB_EMULATOR_HOST=pubsub-emulator:8085
+      - PUBSUB_TOPIC=mtr-arrivals
+      - POLL_INTERVAL_SECONDS=30
+    networks:
+      - mtr-network
+    profiles:
+      - services
+
+  dbt:
+    build:
+      context: ./dbt_project
+      dockerfile: Dockerfile
+    container_name: mtr-dbt
+    depends_on:
+      - bigquery-emulator
+    environment:
+      - DBT_BIGQUERY_PROJECT=local-project
+      - DBT_BIGQUERY_DATASET=mtr_analytics
+    volumes:
+      - ./dbt_project:/app
+    networks:
+      - mtr-network
+    profiles:
+      - services
+
+networks:
+  mtr-network:
+    driver: bridge

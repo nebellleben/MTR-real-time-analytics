@@ -1,0 +1,68 @@
+version: 2
+
+models:
+  - name: dim_lines
+    description: "Dimension table for MTR lines"
+    columns:
+      - name: line_code
+        description: "MTR line code"
+        tests:
+          - not_null
+          - unique
+      - name: line_name
+        description: "Full line name"
+        tests:
+          - not_null
+      - name: line_color
+        description: "Hex color code for visualization"
+      - name: is_urban
+        description: "Whether line serves urban areas"
+
+  - name: dim_stations
+    description: "Dimension table for MTR stations"
+    columns:
+      - name: station_code
+        description: "Station code"
+        tests:
+          - not_null
+          - unique
+      - name: station_name
+        description: "Station name in English"
+        tests:
+          - not_null
+      - name: line_code
+        description: "MTR line code"
+        tests:
+          - not_null
+      - name: is_interchange
+        description: "Whether station is an interchange"
+
+  - name: fact_delays
+    description: "Fact table for delay metrics aggregated by hour"
+    columns:
+      - name: ingestion_date
+        description: "Date of the data"
+        tests:
+          - not_null
+      - name: hour
+        description: "Hour of day (0-23)"
+        tests:
+          - not_null
+      - name: line_code
+        description: "MTR line code"
+        tests:
+          - not_null
+      - name: station_code
+        description: "Station code"
+        tests:
+          - not_null
+      - name: total_arrivals
+        description: "Total number of arrivals"
+        tests:
+          - not_null
+      - name: delayed_count
+        description: "Number of delayed arrivals"
+        tests:
+          - not_null
+      - name: delay_percentage
+        description: "Percentage of delayed arrivals"
