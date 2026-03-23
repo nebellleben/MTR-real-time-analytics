@@ -9,8 +9,6 @@ with source as (
         sequence,
         arrival_time as scheduled_arrival_time,
         time_remaining as time_remaining_seconds,
-        is_delayed,
-        delay_seconds,
         direction,
         ingestion_timestamp,
         ingestion_date
@@ -29,8 +27,6 @@ deduplicated as (
         sequence,
         scheduled_arrival_time,
         time_remaining_seconds,
-        is_delayed,
-        delay_seconds,
         direction,
         ingestion_timestamp,
         ingestion_date,
@@ -52,11 +48,10 @@ final as (
         sequence,
         scheduled_arrival_time,
         time_remaining_seconds,
-        is_delayed,
-        delay_seconds,
         direction,
         ingestion_timestamp,
-        ingestion_date
+        ingestion_date,
+        row_num
     from deduplicated
     where row_num = 1
 )

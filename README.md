@@ -294,21 +294,60 @@ CLUSTER BY line_code, station_code;
 
 ## Dashboard
 
-**Live Dashboard**: [MTR Real-Time Analytics](https://lookerstudio.google.com/reporting/580aa7b2-68b8-44b9-8d7d-a82f41bd6b33)
+**Live Dashboard**: [MTR Wait Time Analysis](https://mtr-wait-time-analysis.streamlit.app)
 
-### Dashboard Tiles
+### Dashboard Features
 
-#### Tile 1: Average Wait Time by Line (Categorical)
-- **Type**: Bar Chart
-- **Dimension**: Line Name
-- **Metric**: Average Time Remaining (seconds)
-- **Purpose**: Compare service levels across lines
+The Streamlit dashboard provides comprehensive wait time analysis:
 
-#### Tile 2: Delay Trends Over Time (Temporal)
-- **Type**: Time Series Line Chart
-- **Dimension**: Hour of Day
-- **Metric**: Count of Delayed Trains, Average Delay Duration
-- **Purpose**: Identify peak delay periods
+#### 1. Overview Metrics
+- Total arrivals, average/max wait times
+- Active lines and stations count
+- Real-time data freshness indicator
+
+#### 2. Hourly Trends
+- Interactive line chart showing wait time by hour and line
+- Heatmap visualization of wait patterns
+- Peak hour identification
+
+#### 3. Line Analysis
+- Bar chart comparing average wait times across lines
+- Box plot showing wait time distribution per line
+- Detailed statistics table with std dev, min, max
+
+#### 4. Station Analysis
+- Individual station hourly patterns
+- Direction comparison (UP/DOWN)
+- Top 10 stations with longest wait times
+
+#### 5. Distribution Analysis
+- Histogram with box plot marginal
+- Cumulative distribution function (CDF)
+- Percentile breakdown (10th to 99th)
+
+#### 6. Anomaly Detection
+- Automatic detection of unusually long/short waits
+- Statistical thresholds (mean ± 2σ)
+- Visual anomaly scatter plot by line and hour
+
+### Deploy Your Own Dashboard
+
+1. **Fork the repository**
+
+2. **Create Streamlit Cloud app**:
+   - Go to [share.streamlit.io](https://share.streamlit.io)
+   - Connect your GitHub account
+   - Select the forked repository
+   - Set main file path: `dashboard/app.py`
+
+3. **Set environment variables** (if needed):
+   - In Streamlit Cloud settings, add secrets:
+   ```toml
+   [gcp_service_account]
+   # Only needed if not using gcloud ADC
+   ```
+
+4. **Deploy** - Streamlit Cloud will automatically deploy and provide a URL
 
 ## Evaluation Criteria Coverage
 
@@ -319,7 +358,7 @@ CLUSTER BY line_code, station_code;
 | Streaming Ingestion | BigQuery Streaming API |
 | Data Warehouse | BigQuery with partitioning & clustering |
 | Transformations | dbt with staging/marts layers |
-| Dashboard | Looker Studio with 2+ tiles |
+| Dashboard | Streamlit Cloud with interactive visualizations |
 | Reproducibility | Makefile + detailed README |
 
 ## Going the Extra Mile

@@ -1,5 +1,5 @@
 """
-MTR API Producer - fetches real-time MTR arrival data and publishes to Pub/Sub.
+MTR API Producer - fetches real-time MTR arrival data and streams to BigQuery.
 """
 
 import os
@@ -29,7 +29,6 @@ class Config:
         "MTR_API_BASE_URL", "https://rt.data.gov.hk/v1/transport/mtr"
     )
     POLL_INTERVAL = int(os.getenv("POLL_INTERVAL_SECONDS", "30"))
-    DELAY_THRESHOLD = int(os.getenv("DELAY_THRESHOLD_SECONDS", "300"))
     MTR_LINES = os.getenv("MTR_LINES", "TCL,EAL,TML,TKL,KTL,TWL,ISL,SIL,DRL,AEL").split(
         ","
     )
@@ -146,7 +145,6 @@ class MTRClient:
         )
 
     def get_schedule(self, line_code: str, station_code: str) -> Dict[str, Any]:
-        """Get train schedule for a specific line and station"""
         try:
             url = f"{self.base_url}/getSchedule.php?line={line_code}&sta={station_code}"
             response = self.session.get(url, timeout=10)
@@ -162,7 +160,6 @@ class MTRClient:
     def parse_arrivals(
         self, line_code: str, station_code: str, schedule_data: Dict
     ) -> List[Dict[str, Any]]:
-        """Parse schedule data into arrival records"""
         arrivals = []
         now = datetime.utcnow()
 
@@ -188,11 +185,6 @@ class MTRClient:
                     if time_remaining < 0:
                         continue
 
-                    is_delayed = time_remaining > Config.DELAY_THRESHOLD
-                    delay_seconds = (
-                        time_remaining - Config.DELAY_THRESHOLD if is_delayed else 0
-                    )
-
                     arrival = {
                         "arrival_id": str(uuid.uuid4()),
                         "line_code": line_code,
@@ -203,8 +195,6 @@ class MTRClient:
                         "sequence": int(schedule.get("seq", 0)),
                         "arrival_time": arrival_time.isoformat(),
                         "time_remaining": time_remaining,
-                        "is_delayed": is_delayed,
-                        "delay_seconds": delay_seconds,
                         "direction": direction,
                         "ingestion_timestamp": now.isoformat(),
                         "ingestion_date": now.strftime("%Y-%m-%d"),
@@ -233,8 +223,6 @@ class BigQueryWriter:
             bigquery.SchemaField("sequence", "INTEGER", mode="NULLABLE"),
             bigquery.SchemaField("arrival_time", "TIMESTAMP", mode="NULLABLE"),
             bigquery.SchemaField("time_remaining", "INTEGER", mode="NULLABLE"),
-            bigquery.SchemaField("is_delayed", "BOOLEAN", mode="NULLABLE"),
-            bigquery.SchemaField("delay_seconds", "INTEGER", mode="NULLABLE"),
             bigquery.SchemaField("direction", "STRING", mode="NULLABLE"),
             bigquery.SchemaField("ingestion_timestamp", "TIMESTAMP", mode="NULLABLE"),
             bigquery.SchemaField("ingestion_date", "DATE", mode="NULLABLE"),
@@ -243,7 +231,6 @@ class BigQueryWriter:
 
     @retry.Retry(predicate=retry.if_exception_type(Exception))
     def insert(self, rows: List[Dict[str, Any]]) -> None:
-        """Insert rows into BigQuery"""
         errors = self.client.insert_rows_json(self.table_id, rows)
         if errors:
             logger.error(f"Failed to insert rows into BigQuery: {errors}")
@@ -252,7 +239,6 @@ class BigQueryWriter:
 
 
 def poll_and_publish():
-    """Main polling loop"""
     config = Config()
     mtr_client = MTRClient(config.MTR_API_BASE_URL)
     bq_writer = BigQueryWriter(
@@ -295,7 +281,6 @@ def poll_and_publish():
 
 
 def run_continuous():
-    """Run continuous polling loop"""
     config = Config()
     logger.info(f"Starting continuous polling (interval: {config.POLL_INTERVAL}s)")
 
