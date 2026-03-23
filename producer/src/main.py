@@ -171,30 +171,41 @@ class MTRClient:
 
         for direction in ["UP", "DOWN"]:
             schedules = station_data.get(direction, [])
-            for schedule in schedules:
+            if not schedules:
+                continue
+
+            sorted_schedules = sorted(schedules, key=lambda x: int(x.get("seq", 0)))
+
+            for i in range(len(sorted_schedules) - 1):
+                current = sorted_schedules[i]
+                next_train = sorted_schedules[i + 1]
+
                 try:
-                    arrival_time_str = schedule.get("time", "")
-                    if not arrival_time_str:
+                    current_time_remaining = int(current.get("ttnt", 0)) * 60
+                    next_time_remaining = int(next_train.get("ttnt", 0)) * 60
+
+                    interval_seconds = next_time_remaining - current_time_remaining
+                    if interval_seconds <= 0:
                         continue
 
-                    arrival_time = datetime.strptime(
-                        arrival_time_str, "%Y-%m-%d %H:%M:%S"
-                    )
-
-                    time_remaining = int(schedule.get("ttnt", 0)) * 60
-                    if time_remaining < 0:
-                        continue
+                    arrival_time_str = current.get("time", "")
+                    if arrival_time_str:
+                        arrival_time = datetime.strptime(
+                            arrival_time_str, "%Y-%m-%d %H:%M:%S"
+                        )
+                    else:
+                        arrival_time = now
 
                     arrival = {
                         "arrival_id": str(uuid.uuid4()),
                         "line_code": line_code,
                         "line_name": self.MTR_LINE_NAMES.get(line_code, "Unknown"),
                         "station_code": station_code,
-                        "dest_station": schedule.get("dest", ""),
-                        "platform": schedule.get("plat", ""),
-                        "sequence": int(schedule.get("seq", 0)),
+                        "dest_station": current.get("dest", ""),
+                        "platform": current.get("plat", ""),
+                        "sequence": i + 1,
                         "arrival_time": arrival_time.isoformat(),
-                        "time_remaining": time_remaining,
+                        "time_remaining": interval_seconds,
                         "direction": direction,
                         "ingestion_timestamp": now.isoformat(),
                         "ingestion_date": now.strftime("%Y-%m-%d"),
