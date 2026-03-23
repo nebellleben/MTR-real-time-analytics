@@ -9,6 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from google.cloud import bigquery
+from google.oauth2 import service_account
 from datetime import datetime, timedelta
 import os
 
@@ -53,8 +54,14 @@ st.markdown(
 
 @st.cache_resource
 def get_bigquery_client():
-    """Get BigQuery client (uses gcloud ADC credentials)"""
-    return bigquery.Client(project="de-zoomcamp-485516")
+    """Get BigQuery client with service account credentials for Streamlit Cloud"""
+    if "gcp_service_account" in st.secrets:
+        credentials = service_account.Credentials.from_service_account_info(
+            st.secrets["gcp_service_account"]
+        )
+        return bigquery.Client(credentials=credentials, project="de-zoomcamp-485516")
+    else:
+        return bigquery.Client(project="de-zoomcamp-485516")
 
 
 @st.cache_data(ttl=300)
