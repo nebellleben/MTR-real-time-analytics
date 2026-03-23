@@ -102,9 +102,10 @@ def load_data(_client, hours_back=24):
         WHERE ingestion_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {hours_back} HOUR)
     )
     SELECT * FROM raw_data
-    ORDER BY ingestion_timestamp DESC
+    ORDER BY ingestion_timestamp desc
     """
     df = _client.query(query).to_dataframe()
+    df["time_remaining_minutes"] = df["time_remaining_seconds"] / 60
     return df
 
 
@@ -136,6 +137,16 @@ def load_hourly_stats(_client, days_back=7):
     ORDER BY ingestion_date, hour, line_code
     """
     df = _client.query(query).to_dataframe()
+    for col in [
+        "avg_wait_seconds",
+        "std_wait_seconds",
+        "min_wait_seconds",
+        "max_wait_seconds",
+        "upper_bound_seconds",
+        "lower_bound_seconds",
+    ]:
+        if col in df.columns:
+            df[col.replace("_seconds", "_minutes")] = df[col] / 60
     return df
 
 
@@ -216,16 +227,16 @@ def main():
     with col1:
         st.metric(label="Total Arrivals", value=f"{len(df_filtered):,}")
     with col2:
-        avg_wait = df_filtered["time_remaining_seconds"].mean()
+        avg_wait = df_filtered["time_remaining_minutes"].mean()
         st.metric(
             label="Avg Wait Time",
-            value=f"{avg_wait:.0f}s" if not pd.isna(avg_wait) else "N/A",
+            value=f"{avg_wait:.1f} min" if not pd.isna(avg_wait) else "N/A",
         )
     with col3:
-        max_wait = df_filtered["time_remaining_seconds"].max()
+        max_wait = df_filtered["time_remaining_minutes"].max()
         st.metric(
             label="Max Wait Time",
-            value=f"{max_wait:.0f}s" if not pd.isna(max_wait) else "N/A",
+            value=f"{max_wait:.1f} min" if not pd.isna(max_wait) else "N/A",
         )
     with col4:
         lines_active = df_filtered["line_name"].nunique()
@@ -253,7 +264,7 @@ def main():
 
         # Hourly average by line
         hourly_avg = (
-            df_filtered.groupby(["hour", "line_name"])["time_remaining_seconds"]
+            df_filtered.groupby(["hour", "line_name"])["time_remaining_minutes"]
             .mean()
             .reset_index()
         )
@@ -261,12 +272,12 @@ def main():
         fig_hourly = px.line(
             hourly_avg,
             x="hour",
-            y="time_remaining_seconds",
+            y="time_remaining_minutes",
             color="line_name",
             title="Average Wait Time by Hour and Line",
             labels={
                 "hour": "Hour of Day",
-                "time_remaining_seconds": "Avg Wait Time (seconds)",
+                "time_remaining_minutes": "Avg Wait Time (min)",
                 "line_name": "Line",
             },
             markers=True,
@@ -275,15 +286,14 @@ def main():
         fig_hourly.update_layout(height=500)
         st.plotly_chart(fig_hourly, use_container_width=True)
 
-        # Heatmap
         st.subheader("Wait Time Heatmap")
         heatmap_data = hourly_avg.pivot(
-            index="line_name", columns="hour", values="time_remaining_seconds"
+            index="line_name", columns="hour", values="time_remaining_minutes"
         )
 
         fig_heatmap = px.imshow(
             heatmap_data,
-            labels=dict(x="Hour", y="Line", color="Avg Wait (s)"),
+            labels=dict(x="Hour", y="Line", color="Avg Wait (min)"),
             title="Wait Time Heatmap by Line and Hour",
             aspect="auto",
         )
@@ -297,14 +307,14 @@ def main():
         # Line summary
         line_summary = (
             df_filtered.groupby("line_name")
-            .agg({"time_remaining_seconds": ["mean", "std", "min", "max", "count"]})
+            .agg({"time_remaining_minutes": ["mean", "std", "min", "max", "count"]})
             .round(2)
         )
         line_summary.columns = [
-            "Avg Wait (s)",
+            "Avg Wait (min)",
             "Std Dev",
-            "Min (s)",
-            "Max (s)",
+            "Min (min)",
+            "Max (min)",
             "Count",
         ]
         line_summary = line_summary.reset_index()
@@ -313,8 +323,8 @@ def main():
 
         with col1:
             fig_bar = px.bar(
-                line_summary.sort_values("Avg Wait (s)", ascending=True),
-                x="Avg Wait (s)",
+                line_summary.sort_values("Avg Wait (min)", ascending=True),
+                x="Avg Wait (min)",
                 y="line_name",
                 orientation="h",
                 title="Average Wait Time by Line",
@@ -328,20 +338,22 @@ def main():
             fig_box = px.box(
                 df_filtered,
                 x="line_name",
-                y="time_remaining_seconds",
+                y="time_remaining_minutes",
                 title="Wait Time Distribution by Line",
-                labels={"line_name": "Line", "time_remaining_seconds": "Wait Time (s)"},
+                labels={
+                    "line_name": "Line",
+                    "time_remaining_minutes": "Wait Time (min)",
+                },
                 color="line_name",
                 color_discrete_map=MTR_LINE_COLORS,
             )
             fig_box.update_layout(height=500, xaxis_tickangle=-45, showlegend=False)
             st.plotly_chart(fig_box, use_container_width=True)
 
-        # Line summary table
         st.subheader("Line Statistics")
         st.dataframe(
             line_summary.style.background_gradient(
-                subset=["Avg Wait (s)"], cmap="Blues"
+                subset=["Avg Wait (min)"], cmap="Blues"
             ),
             use_container_width=True,
         )
@@ -361,32 +373,30 @@ def main():
             col1, col2 = st.columns(2)
 
             with col1:
-                # Station hourly pattern
                 station_hourly = (
-                    station_data.groupby("hour")["time_remaining_seconds"]
+                    station_data.groupby("hour")["time_remaining_minutes"]
                     .mean()
                     .reset_index()
                 )
                 fig_station = px.bar(
                     station_hourly,
                     x="hour",
-                    y="time_remaining_seconds",
+                    y="time_remaining_minutes",
                     title=f"Hourly Wait Pattern at {selected_station}",
-                    labels={"hour": "Hour", "time_remaining_seconds": "Avg Wait (s)"},
+                    labels={"hour": "Hour", "time_remaining_minutes": "Avg Wait (min)"},
                 )
                 st.plotly_chart(fig_station, use_container_width=True)
 
             with col2:
-                # Direction comparison
                 if station_data["direction"].nunique() > 1:
                     direction_data = (
-                        station_data.groupby("direction")["time_remaining_seconds"]
+                        station_data.groupby("direction")["time_remaining_minutes"]
                         .mean()
                         .reset_index()
                     )
                     fig_dir = px.pie(
                         direction_data,
-                        values="time_remaining_seconds",
+                        values="time_remaining_minutes",
                         names="direction",
                         title="Wait Time by Direction",
                     )
@@ -394,24 +404,23 @@ def main():
                 else:
                     st.info("Only one direction available for this station")
 
-        # Top 10 stations by wait time
         st.subheader("Top 10 Stations by Average Wait Time")
         station_avg = (
-            df_filtered.groupby(["station_code", "line_name"])["time_remaining_seconds"]
+            df_filtered.groupby(["station_code", "line_name"])["time_remaining_minutes"]
             .mean()
             .reset_index()
         )
-        station_avg = station_avg.nlargest(10, "time_remaining_seconds")
+        station_avg = station_avg.nlargest(10, "time_remaining_minutes")
 
         fig_top_stations = px.bar(
             station_avg,
-            x="time_remaining_seconds",
+            x="time_remaining_minutes",
             y="station_code",
             color="line_name",
             orientation="h",
             title="Top 10 Stations with Longest Wait Times",
             labels={
-                "time_remaining_seconds": "Avg Wait (s)",
+                "time_remaining_minutes": "Avg Wait (min)",
                 "station_code": "Station",
             },
             color_discrete_map=MTR_LINE_COLORS,
@@ -426,21 +435,19 @@ def main():
         col1, col2 = st.columns(2)
 
         with col1:
-            # Histogram
             fig_hist = px.histogram(
                 df_filtered,
-                x="time_remaining_seconds",
+                x="time_remaining_minutes",
                 nbins=50,
                 title="Overall Wait Time Distribution",
-                labels={"time_remaining_seconds": "Wait Time (s)"},
+                labels={"time_remaining_minutes": "Wait Time (min)"},
                 marginal="box",
             )
             fig_hist.update_layout(height=400)
             st.plotly_chart(fig_hist, use_container_width=True)
 
         with col2:
-            # Cumulative distribution
-            wait_times = df_filtered["time_remaining_seconds"].sort_values()
+            wait_times = df_filtered["time_remaining_minutes"].sort_values()
             cumulative = wait_times.rank(method="first") / len(wait_times)
 
             fig_cdf = go.Figure()
@@ -449,23 +456,22 @@ def main():
             )
             fig_cdf.update_layout(
                 title="Cumulative Distribution of Wait Times",
-                xaxis_title="Wait Time (s)",
+                xaxis_title="Wait Time (min)",
                 yaxis_title="Cumulative Probability",
                 height=400,
             )
             st.plotly_chart(fig_cdf, use_container_width=True)
 
-        # Percentile table
         st.subheader("Wait Time Percentiles")
         percentiles = [10, 25, 50, 75, 90, 95, 99]
-        percentile_values = df_filtered["time_remaining_seconds"].quantile(
+        percentile_values = df_filtered["time_remaining_minutes"].quantile(
             [p / 100 for p in percentiles]
         )
 
         percentile_df = pd.DataFrame(
             {
                 "Percentile": [f"{p}th" for p in percentiles],
-                "Wait Time (s)": [f"{v:.0f}" for v in percentile_values.values],
+                "Wait Time (min)": [f"{v:.1f}" for v in percentile_values.values],
             }
         )
         st.dataframe(percentile_df, use_container_width=True)
@@ -510,22 +516,20 @@ def main():
                 )
                 st.metric("Unusually Short", short_count)
 
-            # Anomaly chart
             if not anomalies.empty:
                 fig_anomaly = px.scatter(
                     anomalies,
                     x="hour",
-                    y="avg_wait_seconds",
+                    y="avg_wait_minutes",
                     color="anomaly_type",
                     facet_col="line_name",
                     facet_col_wrap=3,
                     title="Anomalies by Hour and Line",
-                    labels={"avg_wait_seconds": "Avg Wait (s)", "hour": "Hour"},
+                    labels={"avg_wait_minutes": "Avg Wait (min)", "hour": "Hour"},
                 )
                 fig_anomaly.update_layout(height=600)
                 st.plotly_chart(fig_anomaly, use_container_width=True)
 
-                # Anomaly table
                 st.subheader("Anomaly Details")
                 anomaly_display = anomalies[
                     [
@@ -533,12 +537,19 @@ def main():
                         "hour",
                         "line_name",
                         "station_code",
-                        "avg_wait_seconds",
-                        "upper_bound_seconds",
-                        "lower_bound_seconds",
+                        "avg_wait_minutes",
+                        "upper_bound_minutes",
+                        "lower_bound_minutes",
                         "anomaly_type",
                     ]
                 ].sort_values("ingestion_date", ascending=False)
+                anomaly_display = anomaly_display.rename(
+                    columns={
+                        "avg_wait_minutes": "Avg Wait (min)",
+                        "upper_bound_minutes": "Upper Bound (min)",
+                        "lower_bound_minutes": "Lower Bound (min)",
+                    }
+                )
                 st.dataframe(anomaly_display, use_container_width=True)
             else:
                 st.info("No anomalies detected in the selected time period")
