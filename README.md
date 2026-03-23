@@ -247,7 +247,7 @@ CLUSTER BY line_code, station_code;
 
 ## Dashboard
 
-**Live Dashboard**: [MTR Wait Time Analysis](https://mtr-wait-time-analysis.streamlit.app)
+**Live Dashboard**: [MTR Wait Time Analysis](https://g7y8eyjubppvkm5mqndgm7.streamlit.app/)
 
 ### Dashboard Features
 
