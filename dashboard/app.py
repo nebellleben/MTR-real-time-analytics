@@ -52,6 +52,24 @@ st.markdown(
 )
 
 
+MTR_LINE_COLORS = {
+    "Tsuen Wan Line": "#ED1D24",
+    "Kwun Tong Line": "#00A040",
+    "Island Line": "#0075C2",
+    "Tseung Kwan O Line": "#7D4990",
+    "Tung Chung Line": "#F7943E",
+    "Airport Express": "#00888C",
+    "Disneyland Resort Line": "#D4849A",
+    "East Rail Line": "#5FC0D3",
+    "Tuen Ma Line": "#9A3B26",
+    "South Island Line": "#B5D334",
+}
+
+
+def get_line_color(line_name):
+    return MTR_LINE_COLORS.get(line_name, "#1f77b4")
+
+
 @st.cache_resource
 def get_bigquery_client():
     """Get BigQuery client with service account credentials for Streamlit Cloud"""
@@ -252,6 +270,7 @@ def main():
                 "line_name": "Line",
             },
             markers=True,
+            color_discrete_map=MTR_LINE_COLORS,
         )
         fig_hourly.update_layout(height=500)
         st.plotly_chart(fig_hourly, use_container_width=True)
@@ -293,29 +312,29 @@ def main():
         col1, col2 = st.columns(2)
 
         with col1:
-            # Bar chart - average wait by line
             fig_bar = px.bar(
                 line_summary.sort_values("Avg Wait (s)", ascending=True),
                 x="Avg Wait (s)",
                 y="line_name",
                 orientation="h",
                 title="Average Wait Time by Line",
-                color="Avg Wait (s)",
-                color_continuous_scale="Blues",
+                color="line_name",
+                color_discrete_map=MTR_LINE_COLORS,
             )
-            fig_bar.update_layout(height=500)
+            fig_bar.update_layout(height=500, showlegend=False)
             st.plotly_chart(fig_bar, use_container_width=True)
 
         with col2:
-            # Box plot
             fig_box = px.box(
                 df_filtered,
                 x="line_name",
                 y="time_remaining_seconds",
                 title="Wait Time Distribution by Line",
                 labels={"line_name": "Line", "time_remaining_seconds": "Wait Time (s)"},
+                color="line_name",
+                color_discrete_map=MTR_LINE_COLORS,
             )
-            fig_box.update_layout(height=500, xaxis_tickangle=-45)
+            fig_box.update_layout(height=500, xaxis_tickangle=-45, showlegend=False)
             st.plotly_chart(fig_box, use_container_width=True)
 
         # Line summary table
@@ -395,8 +414,9 @@ def main():
                 "time_remaining_seconds": "Avg Wait (s)",
                 "station_code": "Station",
             },
+            color_discrete_map=MTR_LINE_COLORS,
         )
-        fig_top_stations.update_layout(height=400)
+        fig_top_stations.update_layout(height=400, showlegend=False)
         st.plotly_chart(fig_top_stations, use_container_width=True)
 
     # Tab 4: Distribution
