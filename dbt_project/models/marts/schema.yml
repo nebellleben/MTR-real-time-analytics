@@ -32,8 +32,8 @@ models:
       - name: is_interchange
         description: "Whether station is an interchange"
 
-  - name: fact_delays
-    description: "Fact table for delay metrics aggregated by hour"
+  - name: fact_wait_analysis
+    description: "Fact table for wait time metrics aggregated by hour and line"
     columns:
       - name: ingestion_date
         description: "Date of the data"
@@ -47,17 +47,31 @@ models:
         description: "MTR line code"
         tests:
           - not_null
+      - name: line_name
+        description: "Full line name"
+        tests:
+          - not_null
       - name: station_code
         description: "Station code"
         tests:
           - not_null
-      - name: total_arrivals
-        description: "Total number of arrivals"
+      - name: sample_count
+        description: "Number of arrival observations"
         tests:
           - not_null
-      - name: delayed_count
-        description: "Number of delayed arrivals"
+      - name: avg_wait_seconds
+        description: "Average wait time in seconds"
         tests:
           - not_null
-      - name: delay_percentage
-        description: "Percentage of delayed arrivals"
+      - name: std_wait_seconds
+        description: "Standard deviation of wait times"
+      - name: min_wait_seconds
+        description: "Minimum wait time observed"
+      - name: max_wait_seconds
+        description: "Maximum wait time observed"
+      - name: upper_bound_seconds
+        description: "Upper threshold (mean + 2*std)"
+      - name: lower_bound_seconds
+        description: "Lower threshold (mean - 2*std)"
+      - name: wait_category
+        description: "Classification: unusually_short, normal, unusually_long"
