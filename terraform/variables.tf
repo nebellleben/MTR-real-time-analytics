@@ -1,46 +1,22 @@
 variable "project_id" {
-  type        = string
   description = "GCP Project ID"
+  type        = string
 }
 
 variable "region" {
-  type        = string
   description = "GCP Region"
+  type        = string
   default     = "asia-east2"
 }
 
-variable "zone" {
+variable "bigquery_dataset" {
+  description = "BigQuery dataset name"
   type        = string
-  description = "GCP Zone"
-  default     = "asia-east2-a"
+  default     = "mtr_analytics"
 }
 
-variable "gke_node_count" {
-  type        = number
-  description = "Number of GKE nodes"
-  default     = 3
-}
-
-variable "gke_machine_type" {
+variable "storage_bucket" {
+  description = "GCS bucket name for data lake"
   type        = string
-  description = "GKE node machine type"
-  default     = "e2-standard-4"
-}
-
-variable "kafka_replication_factor" {
-  type        = number
-  description = "Kafka replication factor"
-  default     = 3
-}
-
-variable "kafka_partitions" {
-  type        = number
-  description = "Number of Kafka partitions"
-  default     = 6
-}
-
-variable "kafka_topic" {
-  type        = string
-  description = "Kafka topic name"
-  default     = "mtr-arrivals"
+  default     = "mtr-data-lake"
 }

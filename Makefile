@@ -1,6 +1,8 @@
 .PHONY: help infra-init infra-plan infra-apply infra-destroy \
-        docker-build docker-push deploy-producer deploy-dataflow \
-        dbt-run dbt-test dbt-docs local-up local-down clean
+         docker-build docker-push deploy-producer \
+         dbt-run dbt-test dbt-docs local-up local-down clean
+
+         run-producer stop-producer streamlit-run
 
 SHELL := /bin/bash
 PROJECT_ID ?= $(shell gcloud config get-value project 2>/dev/null || echo "your-project-id")
@@ -18,25 +20,28 @@ help:
 	@echo "  make infra-destroy     Destroy all infrastructure"
 	@echo ""
 	@echo "Docker:"
-	@echo "  make docker-build      Build all Docker images"
+	@echo "  make docker-build      Build producer Docker image"
 	@echo "  make docker-push       Push images to GCR"
 	@echo ""
 	@echo "Deployment:"
 	@echo "  make deploy-producer   Deploy producer to Cloud Run"
-	@echo "  make deploy-dataflow   Deploy Dataflow streaming job"
-	@echo "  make deploy-all        Deploy all services"
+	@echo "  make run-producer      Run producer locally"
+	@echo "  make stop-producer     Stop local producer"
 	@echo ""
 	@echo "dbt:"
 	@echo "  make dbt-run           Run dbt models"
 	@echo "  make dbt-test          Run dbt tests"
 	@echo "  make dbt-docs          Generate dbt documentation"
 	@echo ""
-	@echo "Local Development:"
-	@echo "  make local-up          Start local environment"
-	@echo "  make local-down        Stop local environment"
+	@echo "Dashboard:"
+	@echo "  make streamlit-run    Run Streamlit dashboard locally"
 	@echo ""
-	@echo "Utilities:"
-	@echo "  make clean             Clean generated files"
+	@echo "Local Development:"
+	@echo "  make local-up          Start local development environment"
+	@echo "  make local-down        Stop local development environment"
+	@echo ""
+	@echo "Cleanup:"
+	@echo "  make clean            Remove generated files"
 
 infra-init:
 	@echo "Initializing Terraform..."
@@ -55,52 +60,52 @@ infra-destroy:
 	cd terraform && terraform destroy -var="project_id=$(PROJECT_ID)" -var="region=$(REGION)" -auto-approve
 
 docker-build:
-	@echo "Building Docker images..."
+	@echo "Building producer Docker image..."
 	docker build -t $(IMAGE_REGISTRY)/mtr-producer:latest ./producer
-	docker build -t $(IMAGE_REGISTRY)/mtr-dataflow:latest ./consumer
 
 docker-push:
 	@echo "Pushing images to GCR..."
 	gcloud auth configure-docker gcr.io --quiet
 	docker push $(IMAGE_REGISTRY)/mtr-producer:latest
-	docker push $(IMAGE_REGISTRY)/mtr-dataflow:latest
 
 deploy-producer: docker-build docker-push
 	@echo "Deploying producer to Cloud Run..."
-	cd terraform && terraform apply -var="project_id=$(PROJECT_ID)" -var="region=$(REGION)" -target=google_cloud_run_service.producer -auto-approve
+	gcloud run deploy mtr-producer \
+		--image=$(IMAGE_REGISTRY)/mtr-producer:latest \
+		--platform managed \
+		--region $(REGION) \
+		--memory 512Mi \
+		--set-env-vars PROJECT_ID=$(PROJECT_ID),BIGQUERY_DATASET=mtr_analytics,BIGQUERY_TABLE=raw_arrivals \
+		--allow-unauthenticated
 
-deploy-dataflow: docker-build docker-push
-	@echo "Deploying Dataflow streaming job..."
-	python consumer/src/main.py \
-		--project=$(PROJECT_ID) \
-		--region=$(REGION) \
-		--temp_location=gs://$(PROJECT_ID)-mtr-data-lake/temp \
-		--staging_location=gs://$(PROJECT_ID)-mtr-data-lake/staging \
-		--runner=DataflowRunner \
-		--streaming \
-		--job_name=mtr-arrivals-streaming
+run-producer:
+	@echo "Running producer locally..."
+	cd producer && python src/main.py
 
-deploy-all: infra-apply deploy-dataflow
-	@echo "All services deployed!"
+stop-producer:
+	@echo "Stopping local producer..."
+	pkill -f "python src/main.py" 2>/dev/null || true
+
+streamlit-run:
+	@echo "Running Streamlit dashboard..."
+	cd dashboard && streamlit run app.py
 
 dbt-run:
 	@echo "Running dbt models..."
-	cd dbt_project && dbt run
+	cd dbt_project && BIGQUERY_PROJECT=$(PROJECT_ID) dbt run
 
 dbt-test:
 	@echo "Running dbt tests..."
-	cd dbt_project && dbt test
+	cd dbt_project && BIGQUERY_PROJECT=$(PROJECT_ID) dbt test
 
 dbt-docs:
 	@echo "Generating dbt documentation..."
-	cd dbt_project && dbt docs generate && dbt docs serve
+	cd dbt_project && BIGQUERY_PROJECT=$(PROJECT_ID) dbt docs generate && dbt docs serve
 
 local-up:
 	@echo "Starting local development environment..."
 	docker-compose up -d
 	@echo "Local environment ready!"
-	@echo "Pub/Sub emulator: localhost:8085"
-	@echo "BigQuery emulator: localhost:9050"
 
 local-down:
 	@echo "Stopping local development environment..."
