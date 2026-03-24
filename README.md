@@ -2,9 +2,10 @@
 
 A serverless streaming data pipeline that ingests MTR (Hong Kong Mass Transit Railway) train arrival data, processes it, stores it in BigQuery, and visualizes insights via Streamlit Cloud.
 
- 
+## Overview
+
 This project builds an end-to-end streaming data pipeline that:
- 
+
 1. **Ingests real-time train arrival data** from the MTR Next Train API
 2. **Streams data directly** to BigQuery via the streaming API
 3. **Stores data** in a partitioned BigQuery data warehouse
@@ -36,9 +37,9 @@ This project builds an end-to-end streaming data pipeline that:
 │                                                         │                   │
 │                                                         ▼                   │
 │                                              ┌─────────────────────────┐   │
-│                                              │   Looker Studio         │   │
-│                                              │   Dashboard (Free)      │   │
-│                                              └─────────────────────────┘   │
+│  │                                              │   Streamlit Cloud       │   │
+│  │                                              │   Dashboard (Free)      │   │
+│  │                                              └─────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 Total Estimated Cost: ~$5-10/month
@@ -75,6 +76,10 @@ The pipeline consumes data from the [MTR Open Data API](https://opendata.mtr.com
   - Disneyland Resort Line (DRL)
   - Airport Express (AEL)
 
+### Wait Time Calculation
+
+The wait time represents the expected wait time for a random passenger arriving at the platform at a uniform time. It is calculated using **only the first arriving train's wait time** from the API, simulating the passenger experience.
+
 ### Data Fields
 
 | Field | Type | Description |
@@ -85,12 +90,10 @@ The pipeline consumes data from the [MTR Open Data API](https://opendata.mtr.com
 | `station_code` | STRING | Station identifier |
 | `dest_station` | STRING | Destination station |
 | `arrival_time` | TIMESTAMP | Expected arrival time |
-| `time_remaining` | INT64 | Seconds until arrival |
+| `time_remaining` | INT64 | Seconds until first train arrives |
 | `platform` | STRING | Platform number |
-| `sequence` | INT64 | Train sequence in the schedule |
-| `is_delayed` | BOOLEAN | Whether the train is delayed |
-| `delay_seconds` | INT64 | Delay duration in seconds |
-| `direction` | STRING | Train direction (DT=Down, UT=Up) |
+| `sequence` | INT64 | Train sequence (always 1 for first train) |
+| `direction` | STRING | Train direction (UP/DOWN) |
 | `ingestion_timestamp` | TIMESTAMP | When record was ingested |
 | `ingestion_date` | DATE | Date partition key |
 
@@ -100,16 +103,13 @@ The pipeline consumes data from the [MTR Open Data API](https://opendata.mtr.com
 MTR-real-time-analytics/
 ├── README.md                          # Project documentation
 ├── Makefile                           # Common commands
-├── docker-compose.yml                 # Local development environment
 ├── .env.example                       # Environment variables template
 │
 ├── terraform/                         # Infrastructure as Code
 │   ├── main.tf                        # Main Terraform configuration
-│   ├── variables.tf                   # Input variables
-│   └── outputs.tf                     # Output values
+│   └── variables.tf                   # Input variables
 │
 ├── producer/                          # BigQuery streaming producer
-│   ├── Dockerfile
 │   ├── requirements.txt
 │   └── src/
 │       └── main.py                    # BigQuery streaming inserts
@@ -135,8 +135,7 @@ MTR-real-time-analytics/
 │   └── .streamlit/
 │       └── config.toml
 │
-└── scripts/                           # Utility scripts
-    └── run_local.sh                   # Local development script
+└── credentials/                       # Service account keys (gitignored)
 ```
 
 ## Prerequisites
@@ -144,8 +143,7 @@ MTR-real-time-analytics/
 - **GCP Account** with billing enabled
 - **GCP CLI** (`gcloud`) installed and authenticated
 - **Terraform** >= 1.0
-- **Docker** >= 20.0
-- **Python** >= 3.9
+- **Python** >= 3.11
 - **dbt** >= 1.5 (with BigQuery adapter)
 
 ## Quick Start
@@ -171,6 +169,8 @@ make infra-apply
 
 ```bash
 cd producer
+python3.11 -m venv .venv311
+source .venv311/bin/activate
 pip install -r requirements.txt
 export PROJECT_ID=de-zoomcamp-485516
 export BIGQUERY_DATASET=mtr_analytics
@@ -189,12 +189,9 @@ BIGQUERY_PROJECT=de-zoomcamp-485516 dbt run
 BIGQUERY_PROJECT=de-zoomcamp-485516 dbt test
 ```
 
-### 5. Connect Looker Studio
+### 5. Access Dashboard
 
-1. Open [Looker Studio](https://lookerstudio.google.com)
-2. Create new data source → BigQuery
-3. Select project → dataset → `fact_delays`
-4. Build dashboard tiles
+The live dashboard is available at: [MTR Wait Time Analysis](https://g7y8eyjubppvkm5mqndgm7.streamlit.app/)
 
 ## Makefile Commands
 
@@ -205,8 +202,7 @@ make infra-apply             # Apply Terraform changes
 make infra-destroy           # Destroy infrastructure
 make dbt-run                 # Run dbt models
 make dbt-test                # Run dbt tests
-make local-up                # Start local development
-make local-down              # Stop local development
+make streamlit-run           # Run Streamlit dashboard locally
 ```
 
 ## BigQuery Schema
@@ -226,8 +222,6 @@ CREATE TABLE `{{project}}.{{dataset}}.raw_arrivals`
     time_remaining INT64,
     platform STRING,
     sequence INT64,
-    is_delayed BOOLEAN,
-    delay_seconds INT64,
     direction STRING,
     ingestion_timestamp TIMESTAMP NOT NULL,
     ingestion_date DATE NOT NULL
@@ -243,7 +237,7 @@ CLUSTER BY line_code, station_code;
 | `stg_arrivals` | Cleaned and deduplicated arrival data (view) |
 | `dim_lines` | MTR line reference data |
 | `dim_stations` | Station reference data with line associations |
-| `fact_delays` | Aggregated delay metrics by time, line, station |
+| `fact_delays` | Aggregated wait time metrics by time, line, station |
 
 ## Dashboard
 
@@ -251,12 +245,14 @@ CLUSTER BY line_code, station_code;
 
 ### Dashboard Features
 
-The Streamlit dashboard provides comprehensive wait time analysis:
+The Streamlit dashboard provides comprehensive wait time analysis with official MTR line colors:
 
 #### 1. Overview Metrics
-- Total arrivals, average/max wait times
-- Active lines and stations count
-- Real-time data freshness indicator
+- Total arrivals count
+- **Average wait time** (in minutes)
+- **Standard deviation** of wait times
+- **Outlier count** (wait times beyond ±2 standard deviations)
+- Active lines count
 
 #### 2. Hourly Trends
 - Interactive line chart showing wait time by hour and line
@@ -266,7 +262,12 @@ The Streamlit dashboard provides comprehensive wait time analysis:
 #### 3. Line Analysis
 - Bar chart comparing average wait times across lines
 - Box plot showing wait time distribution per line
-- Detailed statistics table with std dev, min, max
+- **Detailed statistics table** with:
+  - Average wait time
+  - Standard deviation
+  - Variance
+  - Min/Max values
+  - **Outlier count per line (±2 SD)**
 
 #### 4. Station Analysis
 - Individual station hourly patterns
@@ -283,6 +284,23 @@ The Streamlit dashboard provides comprehensive wait time analysis:
 - Statistical thresholds (mean ± 2σ)
 - Visual anomaly scatter plot by line and hour
 
+### MTR Line Colors
+
+The dashboard uses official MTR line colors for consistency:
+
+| Line | Color |
+|------|-------|
+| Tsuen Wan Line | Red (#ED1D24) |
+| Kwun Tong Line | Green (#00A040) |
+| Island Line | Blue (#0075C2) |
+| Tseung Kwan O Line | Purple (#7D4990) |
+| Tung Chung Line | Orange (#F7943E) |
+| Airport Express | Teal (#00888C) |
+| Disneyland Resort Line | Pink (#D4849A) |
+| East Rail Line | Cyan (#5FC0D3) |
+| Tuen Ma Line | Brown (#9A3B26) |
+| South Island Line | Lime (#B5D334) |
+
 ### Deploy Your Own Dashboard
 
 1. **Fork the repository**
@@ -293,12 +311,39 @@ The Streamlit dashboard provides comprehensive wait time analysis:
    - Select the forked repository
    - Set main file path: `dashboard/app.py`
 
-3. **Set environment variables** (if needed):
+3. **Configure BigQuery Authentication**:
+   - Create a GCP service account with BigQuery access:
+     ```bash
+     gcloud iam service-accounts create streamlit-dashboard \
+       --display-name="Streamlit Dashboard" \
+       --project=YOUR_PROJECT_ID
+     
+     gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+       --member="serviceAccount:streamlit-dashboard@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+       --role="roles/bigquery.dataViewer"
+     
+     gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
+       --member="serviceAccount:streamlit-dashboard@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
+       --role="roles/bigquery.jobUser"
+     
+     gcloud iam service-accounts keys create credentials/streamlit-service-account.json \
+       --iam-account=streamlit-dashboard@YOUR_PROJECT_ID.iam.gserviceaccount.com
+     ```
+   
    - In Streamlit Cloud settings, add secrets:
-   ```toml
-   [gcp_service_account]
-   # Only needed if not using gcloud ADC
-   ```
+     ```toml
+     [gcp_service_account]
+     type = "service_account"
+     project_id = "YOUR_PROJECT_ID"
+     private_key_id = "..."
+     private_key = "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
+     client_email = "streamlit-dashboard@YOUR_PROJECT_ID.iam.gserviceaccount.com"
+     client_id = "..."
+     auth_uri = "https://accounts.google.com/o/oauth2/auth"
+     token_uri = "https://oauth2.googleapis.com/token"
+     auth_provider_x509_cert_url = "https://www.googleapis.com/oauth2/v1/certs"
+     client_x509_cert_url = "..."
+     ```
 
 4. **Deploy** - Streamlit Cloud will automatically deploy and provide a URL
 
@@ -320,9 +365,11 @@ The Streamlit dashboard provides comprehensive wait time analysis:
 |---------|--------|
 | CI/CD Pipeline (GitHub Actions) | Planned |
 | Unit Tests (pytest) | Planned |
-| Data Quality Tests (dbt) | ✅ Completed (21 tests) |
+| Data Quality Tests (dbt) | Completed |
 | Monitoring & Alerting | Planned |
-| dbt Documentation | ✅ Completed |
+| dbt Documentation | Completed |
+| Statistical Analysis (variance, outliers) | Completed |
+| Official MTR Line Colors | Completed |
 
 ## License
 
