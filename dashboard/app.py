@@ -222,7 +222,7 @@ def main():
 
     # Metrics row
     st.subheader("📊 Overview Metrics")
-    col1, col2, col3, col4, col5 = st.columns(5)
+    col1, col2, col3, col4, col5, st.columns(5)
 
     with col1:
         st.metric(label="Total Arrivals", value=f"{len(df_filtered):,}")
@@ -233,17 +233,27 @@ def main():
             value=f"{avg_wait:.1f} min" if not pd.isna(avg_wait) else "N/A",
         )
     with col3:
-        max_wait = df_filtered["time_remaining_minutes"].max()
+        variance = df_filtered["time_remaining_minutes"].var()
+        std_wait = df_filtered["time_remaining_minutes"].std()
         st.metric(
-            label="Max Wait Time",
-            value=f"{max_wait:.1f} min" if not pd.isna(max_wait) else "N/A",
+            label="Std Deviation",
+            value=f"{std_wait:.1f} min" if not pd.isna(std_wait) else "N/A",
         )
     with col4:
+        overall_mean = df_filtered["time_remaining_minutes"].mean()
+        overall_std = df_filtered["time_remaining_minutes"].std()
+        outliers = df_filtered[
+            (df_filtered["time_remaining_minutes"] > overall_mean + 2 * overall_std)
+            | (df_filtered["time_remaining_minutes"] < overall_mean - 2 * overall_std)
+        ]
+        outlier_count = len(outliers)
+        st.metric(
+            label="Outliers (±2 SD)",
+            value=f"{outlier_count:,}",
+        )
+    with col5:
         lines_active = df_filtered["line_name"].nunique()
         st.metric(label="Active Lines", value=lines_active)
-    with col5:
-        stations_active = df_filtered["station_code"].nunique()
-        st.metric(label="Active Stations", value=stations_active)
 
     st.divider()
 
@@ -304,20 +314,44 @@ def main():
     with tab2:
         st.subheader("Line Comparison")
 
-        # Line summary
         line_summary = (
             df_filtered.groupby("line_name")
-            .agg({"time_remaining_minutes": ["mean", "std", "min", "max", "count"]})
+            .agg(
+                {
+                    "time_remaining_minutes": [
+                        "mean",
+                        "std",
+                        "var",
+                        "min",
+                        "max",
+                        "count",
+                    ]
+                }
+            )
             .round(2)
         )
         line_summary.columns = [
             "Avg Wait (min)",
             "Std Dev",
+            "Variance",
             "Min (min)",
             "Max (min)",
             "Count",
         ]
         line_summary = line_summary.reset_index()
+
+        def count_outliers(group):
+            mean = group["time_remaining_minutes"].mean()
+            std = group["time_remaining_minutes"].std()
+            if pd.isna(std):
+                return 0
+            return (
+                (group["time_remaining_minutes"] > mean + 2 * std)
+                | (group["time_remaining_minutes"] < mean - 2 * std)
+            ).sum()
+
+        outlier_counts = df_filtered.groupby("line_name").apply(count_outliers)
+        line_summary["Outliers (±2 SD)"] = outlier_counts.values
 
         col1, col2 = st.columns(2)
 
