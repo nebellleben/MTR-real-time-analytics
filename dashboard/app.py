@@ -203,8 +203,8 @@ def main():
     if len(hours_available) > 0:
         hour_range = st.sidebar.slider(
             "Hour Range",
-            min_value=int(min(hours_available)),
-            max_value=int(max(hours_available)),
+            min_value=0,
+            max_value=23,
             value=(int(min(hours_available)), int(max(hours_available))),
         )
     else:
@@ -220,9 +220,15 @@ def main():
         (df_filtered["hour"] >= hour_range[0]) & (df_filtered["hour"] <= hour_range[1])
     ]
 
+    if df_filtered.empty:
+        st.warning(
+            "No data available for the selected filters. Please adjust your selection or wait for data to be collected."
+        )
+        st.stop()
+
     # Metrics row
     st.subheader("📊 Overview Metrics")
-    col1, col2, col3, col4, col5, st.columns(5)
+    col1, col2, col3, col4, col5 = st.columns(5)
 
     with col1:
         st.metric(label="Total Arrivals", value=f"{len(df_filtered):,}")
@@ -242,11 +248,17 @@ def main():
     with col4:
         overall_mean = df_filtered["time_remaining_minutes"].mean()
         overall_std = df_filtered["time_remaining_minutes"].std()
-        outliers = df_filtered[
-            (df_filtered["time_remaining_minutes"] > overall_mean + 2 * overall_std)
-            | (df_filtered["time_remaining_minutes"] < overall_mean - 2 * overall_std)
-        ]
-        outlier_count = len(outliers)
+        if pd.isna(overall_std):
+            outlier_count = 0
+        else:
+            outliers = df_filtered[
+                (df_filtered["time_remaining_minutes"] > overall_mean + 2 * overall_std)
+                | (
+                    df_filtered["time_remaining_minutes"]
+                    < overall_mean - 2 * overall_std
+                )
+            ]
+            outlier_count = len(outliers)
         st.metric(
             label="Outliers (±2 SD)",
             value=f"{outlier_count:,}",
