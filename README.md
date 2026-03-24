@@ -37,9 +37,9 @@ This project builds an end-to-end streaming data pipeline that:
 │                                                         │                   │
 │                                                         ▼                   │
 │                                              ┌─────────────────────────┐   │
-│  │                                              │   Streamlit Cloud       │   │
-│  │                                              │   Dashboard (Free)      │   │
-│  │                                              └─────────────────────────┘   │
+│                                              │   Streamlit Cloud       │   │
+│                                              │   Dashboard (Free)      │   │
+│                                              └─────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────┘
 
 Total Estimated Cost: ~$5-10/month
