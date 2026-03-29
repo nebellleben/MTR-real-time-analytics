@@ -9,4 +9,4 @@ COPY src/main.py .
 
 ENV PYTHONUNBUFFERED=1
 
-CMD ["python", "main.py", "--continuous"]
+CMD ["python", "main.py"]
