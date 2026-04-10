@@ -103,16 +103,16 @@ schedule-job:
 		--location $(REGION) \
 		--schedule "*/1 * * * *" \
 		--time-zone "Asia/Hong_Kong" \
-		--uri "https://$(REGION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(PROJECT_ID)/jobs/mtr-producer-job:run" \
+		--uri "https://asia-east2-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(shell gcloud projects describe $(PROJECT_ID) --format='value(projectNumber)')/jobs/mtr-producer-job:run" \
 		--http-method POST \
-		--oidc-service-account-email=$(SCHEDULER_SA) \
+		--oauth-service-account-email=$(SCHEDULER_SA) \
 		2>/dev/null || gcloud scheduler jobs update http mtr-producer-schedule \
 		--location $(REGION) \
 		--schedule "*/1 * * * *" \
 		--time-zone "Asia/Hong_Kong" \
-		--uri "https://$(REGION)-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(PROJECT_ID)/jobs/mtr-producer-job:run" \
+		--uri "https://asia-east2-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/$(shell gcloud projects describe $(PROJECT_ID) --format='value(projectNumber)')/jobs/mtr-producer-job:run" \
 		--http-method POST \
-		--oidc-service-account-email=$(SCHEDULER_SA)
+		--oauth-service-account-email=$(SCHEDULER_SA)
 
 unschedule-job:
 	@echo "Deleting Cloud Scheduler job..."

@@ -85,6 +85,11 @@ def get_bigquery_client():
 @st.cache_data(ttl=300)
 def load_data(_client, hours_back=24):
     """Load data from BigQuery"""
+    where_clause = (
+        f"WHERE ingestion_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {hours_back} HOUR)"
+        if hours_back > 0
+        else ""
+    )
     query = f"""
     WITH raw_data AS (
         SELECT
@@ -99,10 +104,11 @@ def load_data(_client, hours_back=24):
             EXTRACT(HOUR FROM arrival_time) as hour,
             EXTRACT(DATE FROM ingestion_timestamp) as date
         FROM `de-zoomcamp-485516.mtr_analytics.raw_arrivals`
-        WHERE ingestion_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL {hours_back} HOUR)
+        {where_clause}
     )
     SELECT * FROM raw_data
     ORDER BY ingestion_timestamp desc
+    LIMIT 100000
     """
     df = _client.query(query).to_dataframe()
     df["time_remaining_minutes"] = df["time_remaining_seconds"] / 60
@@ -112,6 +118,11 @@ def load_data(_client, hours_back=24):
 @st.cache_data(ttl=300)
 def load_hourly_stats(_client, days_back=7):
     """Load hourly statistics from BigQuery"""
+    where_clause = (
+        f"WHERE ingestion_date >= DATE_SUB(CURRENT_DATE(), INTERVAL {days_back} DAY)"
+        if days_back < 9999
+        else ""
+    )
     query = f"""
     WITH hourly_stats AS (
         SELECT
@@ -126,7 +137,7 @@ def load_hourly_stats(_client, days_back=7):
             MIN(time_remaining) as min_wait_seconds,
             MAX(time_remaining) as max_wait_seconds
         FROM `de-zoomcamp-485516.mtr_analytics.raw_arrivals`
-        WHERE ingestion_date >= DATE_SUB(CURRENT_DATE(), INTERVAL {days_back} DAY)
+        {where_clause}
         GROUP BY ingestion_date, hour, line_code, line_name, station_code
     )
     SELECT 
@@ -168,7 +179,7 @@ def main():
     # Load data
     with st.spinner("Loading data from BigQuery..."):
         try:
-            df_raw = load_data(client, hours_back=24)
+            df_raw = load_data(client, hours_back=168)
             df_hourly = load_hourly_stats(client, days_back=7)
 
             if df_raw.empty:
